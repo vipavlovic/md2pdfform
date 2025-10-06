@@ -1,4 +1,4 @@
-# Markdown to PDF Form Converter
+# md2pdfform
 
 A Python script that converts Markdown documents into interactive PDF forms using ReportLab. Transform your Markdown text with special field syntax into fillable PDF forms that users can complete and save.
 
@@ -22,8 +22,8 @@ A Python script that converts Markdown documents into interactive PDF forms usin
 ### Setup
 
 ```bash
-# Create project directory
-mkdir md2pdfform
+# Clone the repository
+git clone https://github.com/vipavlovic/md2pdfform.git
 cd md2pdfform
 
 # Create virtual environment
@@ -38,8 +38,6 @@ source venv/bin/activate
 # Install dependencies
 pip install reportlab markdown beautifulsoup4
 ```
-
-Save the script as `md2pdfform.py` in your project directory.
 
 ## Usage
 
@@ -87,29 +85,39 @@ Use these patterns in your Markdown to create form fields:
 ```markdown
 **Name:** {{text:full_name}}
 **Phone:** {{text:phone_number}}
+**Short Code:** {{text:code:80}}
+**Long Address:** {{text:address:250}}
 ```
+
+You can optionally specify the field width in pixels as the last parameter. Default width is 150px.
 
 ### Number Fields
 ```markdown
 **Age:** {{number:age}}
+**Age (narrow):** {{number:age:60}}
+**Population:** {{number:population:200}}
 ```
 
 ### Email Fields
 ```markdown
 **Email:** {{email:email_address}}
+**Email (wide):** {{email:email_address:250}}
 ```
 
 ### Date Fields
 ```markdown
 **Date of Birth:** {{date:birth_date}}
+**Event Date:** {{date:event_date:180}}
 ```
 
 ### Text Area Fields
 ```markdown
-**Comments:** {{textarea:comments}} # Default 3 lines
-**Detailed Feedback:** {{textarea:feedback:5}} # Custom 5 lines
-**Notes:** {{textarea:notes:10}} # Custom 10 lines
+**Comments:** {{textarea:comments}} # Default 3 lines, 400px width
+**Detailed Feedback:** {{textarea:feedback:5}} # Custom 5 lines, default width
+**Notes:** {{textarea:notes:10:500}} # Custom 10 lines, 500px width
 ```
+
+Text areas support two optional parameters: line count and width. The line count comes first, then the width.
 
 ### Checkbox Fields
 ```markdown
@@ -123,7 +131,7 @@ Use these patterns in your Markdown to create form fields:
 **Size:** {{radio:size:Small,Medium,Large}}
 ```
 
-**Note:** Radio groups with 2 or fewer options show as circular radio buttons. Groups with 3+ options automatically convert to dropdown menus.
+**Note:** Radio groups with 2 or fewer options show as circular radio buttons on the same line. Groups with 3+ options automatically convert to dropdown menus.
 
 ### Dropdown Menus
 ```markdown
@@ -133,31 +141,31 @@ Use these patterns in your Markdown to create form fields:
 
 ### Multiple Fields Per Line
 ```markdown
-Total time: {{number:hours}} hours {{number:minutes}} minutes
-Name: {{text:first}} {{text:last}}
-Date: {{date:day}} Time: {{text:time}}
+Total time: {{number:hours:60}} hours {{number:minutes:60}} minutes
+Name: {{text:first:120}} {{text:last:120}}
+Date: {{date:day:100}} Time: {{text:time:80}}
 ```
 
 ### Underscore Text Fields
 ```markdown
 Name: ________________________
 ```
-(Four or more underscores automatically convert to text fields)
+(Four or more underscores automatically convert to text fields with default width)
 
 ## Comprehensive Demo File
 
 A complete demonstration file (`comprehensive-demo.md`) is available that showcases all features of md2pdfform. This demo includes:
 
 ### All Field Types:
-- Text fields for various inputs (names, addresses, etc.)
-- Number fields for numeric values
-- Email fields with validation
-- Date fields for standardized date input
-- Checkbox fields for yes/no selections
-- Radio button groups (2 options)
-- Dropdown menus (3+ options)
-- Text areas with custom line counts (3, 5, 7, 10 lines)
-- Underscore-to-field auto-conversion
+- **Text fields** for various inputs (names, addresses, etc.) with customizable widths
+- **Number fields** for numeric values with optional width specification
+- **Email fields** with validation and custom widths
+- **Date fields** for standardized date input with width control
+- **Checkbox fields** for yes/no selections
+- **Radio button groups** (2 options displayed inline)
+- **Dropdown menus** (3+ options)
+- **Text areas** with custom line counts (3, 5, 7, 10 lines) and optional widths
+- **Underscore-to-field** auto-conversion
 
 ### Advanced Features:
 - **Multiple fields per line** - Demonstrates compact form layouts
@@ -170,14 +178,14 @@ A complete demonstration file (`comprehensive-demo.md`) is available that showca
 
 ### Demo Structure:
 The demo is organized into 20 sections covering:
-1. Text Input Fields
-2. Number and Email Fields
-3. Date Fields
+1. Text Input Fields (including custom widths)
+2. Number and Email Fields (with width examples)
+3. Date Fields (with width customization)
 4. Checkbox Fields
-5. Radio Button Groups
+5. Radio Button Groups (inline display for 2 options)
 6. Dropdown Menus
-7. Text Area Fields
-8. Multiple Fields Per Line
+7. Text Area Fields (with custom lines and widths)
+8. Multiple Fields Per Line (with custom widths)
 9. Underscore Text Fields
 10. Markdown Formatting Features
 11. Bullet Lists with Formatting
@@ -433,6 +441,14 @@ For issues and questions:
   - Error message or unexpected behavior description
 
 ## Changelog
+
+### Version 1.2.0
+- ✨ **Field width customization** - Specify custom widths for text, email, number, and date fields
+- ✨ **Textarea width control** - Set custom widths for text area fields
+- 🐛 **Fixed radio button layout** - 2-option radio groups now display inline on the same line
+- 🐛 **Fixed checkbox text wrapping** - Checkbox labels now stay on the same line as the checkbox
+- 🐛 **Improved heading spacing** - Proper blank lines before headings following form fields
+- 📏 **Better field spacing** - Automatic space insertion between fields and following text
 
 ### Version 1.1.0
 - ✨ Multiple fields per line - Support for multiple form fields on the same line

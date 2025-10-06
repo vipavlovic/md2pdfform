@@ -17,16 +17,17 @@ class MarkdownToPDFForm:
         self.line_height = 14
         self.current_y = self.height - self.margin
         self.available_width = self.width - (2 * self.margin)
+        self.default_field_width = 150
         
     def parse_markdown_forms(self, md_text):
         """Parse markdown text and identify form field patterns"""
         patterns = [
-            (r'\{\{text:([^}]+)\}\}', 'text'),
-            (r'\{\{email:([^}]+)\}\}', 'email'),
-            (r'\{\{number:([^}]+)\}\}', 'number'),
-            (r'\{\{date:([^}]+)\}\}', 'date'),
-            (r'\{\{textarea:([^}]+):(\d+)\}\}', 'textarea_lines'),
-            (r'\{\{textarea:([^}]+)\}\}', 'textarea'),
+            (r'\{\{text:([^}:]+)(?::(\d+))?\}\}', 'text'),
+            (r'\{\{email:([^}:]+)(?::(\d+))?\}\}', 'email'),
+            (r'\{\{number:([^}:]+)(?::(\d+))?\}\}', 'number'),
+            (r'\{\{date:([^}:]+)(?::(\d+))?\}\}', 'date'),
+            (r'\{\{textarea:([^}:]+):(\d+)(?::(\d+))?\}\}', 'textarea_lines_width'),
+            (r'\{\{textarea:([^}:]+)(?::(\d+))?\}\}', 'textarea'),
             (r'\{\{checkbox:([^}]+)\}\}', 'checkbox'),
             (r'\{\{radio:([^}]+):([^}]+)\}\}', 'radio'),
             (r'\{\{dropdown:([^}]+):([^}]+)\}\}', 'dropdown'),
@@ -46,18 +47,41 @@ class MarkdownToPDFForm:
                     'end': match.end(),
                 }
                 
-                if field_type in ['text', 'email', 'number', 'date', 'checkbox', 'textarea']:
+                if field_type in ['text', 'email', 'number', 'date']:
                     field_info['name'] = match.group(1)
-                elif field_type == 'textarea_lines':
+                    # Check if width is specified (group 2)
+                    if match.group(2):
+                        field_info['width'] = int(match.group(2))
+                    else:
+                        field_info['width'] = self.default_field_width
+                        
+                elif field_type == 'textarea_lines_width':
                     field_info['name'] = match.group(1)
                     field_info['lines'] = int(match.group(2))
                     field_info['type'] = 'textarea'
+                    # Check if width is specified (group 3)
+                    if match.group(3):
+                        field_info['width'] = int(match.group(3))
+                        
+                elif field_type == 'textarea':
+                    field_info['name'] = match.group(1)
+                    # Check if the second group is lines or width
+                    if match.group(2):
+                        # Could be either lines or width - need to determine
+                        # For backward compatibility, treat single number as lines
+                        field_info['lines'] = int(match.group(2))
+                    
+                elif field_type == 'checkbox':
+                    field_info['name'] = match.group(1)
+                    
                 elif field_type in ['radio', 'dropdown']:
                     field_info['name'] = match.group(1)
                     field_info['options'] = [opt.strip() for opt in match.group(2).split(',')]
+                    
                 elif field_type == 'underlines':
                     field_info['name'] = f"field_{len(all_fields) + 1}"
                     field_info['type'] = 'text'
+                    field_info['width'] = self.default_field_width
                 
                 if field_info['type'] == 'textarea' and 'lines' not in field_info:
                     field_info['lines'] = 3
@@ -103,8 +127,21 @@ class MarkdownToPDFForm:
             # Find all fields in this line
             fields_in_line = [f for f in form_fields if f['placeholder'] in line]
             
+            # Check if there's a blank line followed by a heading
+            has_blank_line_before_heading = False
+            if line_num + 1 < len(lines):
+                # Check if next line is blank
+                if not lines[line_num + 1].strip():
+                    # Look for a heading after the blank line
+                    for i in range(line_num + 2, len(lines)):
+                        next_line = lines[i].strip()
+                        if next_line:
+                            if next_line.startswith('#') or (next_line.startswith('**') and next_line.endswith('**') and len(next_line) > 4):
+                                has_blank_line_before_heading = True
+                            break
+            
             if len(fields_in_line) > 0:
-                self._process_line_with_fields(c, line, fields_in_line)
+                self._process_line_with_fields(c, line, fields_in_line, has_blank_line_before_heading)
             else:
                 self._draw_text_line(c, line)
         
@@ -117,7 +154,7 @@ class MarkdownToPDFForm:
             file_size = os.path.getsize(output_filename)
             print(f"PDF created: {output_filename} ({file_size} bytes)")
 
-    def _process_line_with_fields(self, canvas, line, fields):
+    def _process_line_with_fields(self, canvas, line, fields, next_line_is_heading=False):
         """Process line with one or more form fields"""
         # Special handling for textarea - process individually and return
         textarea_fields = [f for f in fields if f['type'] == 'textarea']
@@ -135,7 +172,21 @@ class MarkdownToPDFForm:
                     # Remove this textarea's placeholder from the line for next iteration
                     # This prevents other textareas from being processed multiple times
                     line = line.replace(placeholder, '', 1)
+            
+            # Add extra space before heading
+            if next_line_is_heading:
+                self.current_y -= self.line_height
             return  # Important: return here to prevent further processing
+        
+        # Special handling for lines with only a checkbox and text
+        checkbox_fields = [f for f in fields if f['type'] == 'checkbox']
+        if len(fields) == 1 and len(checkbox_fields) == 1:
+            # Single checkbox on this line - process specially to keep text with checkbox
+            self._process_checkbox_line(canvas, line, checkbox_fields[0])
+            # Add extra space before heading
+            if next_line_is_heading:
+                self.current_y -= self.line_height
+            return
         
         # For non-textarea fields, continue with normal processing
         # Sort fields by position
@@ -190,27 +241,139 @@ class MarkdownToPDFForm:
         
         # Draw remaining text
         if work_line.strip():
+            # Add space before remaining text if it doesn't start with punctuation or space
+            remaining_text = work_line
+            if remaining_text and not remaining_text[0] in ' .,;:!?)':
+                remaining_text = ' ' + remaining_text
+            
             remaining_width = self.width - self.margin - current_x
-            text_width = self._calculate_formatted_text_width(canvas, work_line)
+            text_width = self._calculate_formatted_text_width(canvas, remaining_text)
             
             if text_width <= remaining_width:
                 # Fits on same line
-                self._draw_formatted_text_inline(canvas, work_line, current_x)
+                self._draw_formatted_text_inline(canvas, remaining_text, current_x)
             else:
                 # Doesn't fit, move to next line
                 self.current_y -= self.line_height
                 self._check_page_break(canvas, 1)
-                self._draw_formatted_text(canvas, work_line.strip(), self.margin)
+                self._draw_formatted_text(canvas, remaining_text.strip(), self.margin)
+                # Add extra space before heading
+                if next_line_is_heading:
+                    self.current_y -= self.line_height
                 return
         
         self.current_y -= self.line_height
+        
+        # Add extra space before heading
+        if next_line_is_heading:
+            self.current_y -= self.line_height
+
+    def _process_checkbox_line(self, canvas, line, field):
+        """Process a line with a checkbox field, keeping text with checkbox"""
+        placeholder = field['placeholder']
+        pos = line.find(placeholder)
+        
+        before_text = line[:pos]
+        after_text = line[pos + len(placeholder):]
+        
+        self._check_page_break(canvas, 1)
+        
+        current_x = self.margin
+        
+        # Draw text before checkbox
+        if before_text.strip():
+            current_x = self._draw_formatted_text_inline(canvas, before_text, current_x)
+        
+        # Create checkbox
+        checkbox_width = self._create_form_field(canvas, field, current_x, self.current_y)
+        current_x += checkbox_width
+        
+        # Draw text after checkbox on same line with wrapping support
+        if after_text.strip():
+            self._draw_formatted_text_with_checkbox(canvas, after_text.strip(), current_x)
+        else:
+            self.current_y -= self.line_height
+    
+    def _draw_formatted_text_with_checkbox(self, canvas, text, x_start):
+        """Draw text after checkbox with proper wrapping"""
+        bold_pattern = r'\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*'
+        has_bold = bool(re.search(bold_pattern, text))
+        
+        if not has_bold:
+            # Simple text without bold
+            canvas.setFont("Helvetica", 10)
+            available_width = self.width - self.margin - x_start
+            
+            if canvas.stringWidth(text) <= available_width:
+                # Fits on same line as checkbox
+                canvas.drawString(x_start, self.current_y, text)
+                self.current_y -= self.line_height
+            else:
+                # Need to wrap - use word wrapping
+                words = text.split()
+                current_x = x_start
+                current_line_words = []
+                
+                for word in words:
+                    test_text = ' '.join(current_line_words + [word])
+                    test_width = canvas.stringWidth(test_text)
+                    
+                    if current_x + test_width <= self.width - self.margin:
+                        current_line_words.append(word)
+                    else:
+                        # Draw current line
+                        if current_line_words:
+                            line_text = ' '.join(current_line_words)
+                            canvas.drawString(current_x, self.current_y, line_text)
+                            self.current_y -= self.line_height
+                            self._check_page_break(canvas, 1)
+                            canvas.setFont("Helvetica", 10)
+                        
+                        # Start new line from margin
+                        current_x = self.margin
+                        current_line_words = [word]
+                
+                # Draw remaining words
+                if current_line_words:
+                    line_text = ' '.join(current_line_words)
+                    canvas.drawString(current_x, self.current_y, line_text)
+                    self.current_y -= self.line_height
+        else:
+            # Text has bold formatting
+            parts = self._parse_formatted_parts(text, bold_pattern)
+            current_x = x_start
+            available_width = self.width - self.margin - x_start
+            
+            for part_type, part_text in parts:
+                font_name = "Helvetica-Bold" if part_type == 'bold' else "Helvetica"
+                canvas.setFont(font_name, 10)
+                
+                words = part_text.split()
+                
+                for word in words:
+                    word_with_space = word if current_x == x_start or current_x == self.margin else " " + word
+                    word_width = canvas.stringWidth(word_with_space)
+                    
+                    if current_x + word_width > self.width - self.margin:
+                        # Move to next line
+                        self.current_y -= self.line_height
+                        self._check_page_break(canvas, 1)
+                        canvas.setFont(font_name, 10)
+                        current_x = self.margin
+                        word_with_space = word
+                        word_width = canvas.stringWidth(word_with_space)
+                    
+                    canvas.drawString(current_x, self.current_y, word_with_space)
+                    current_x += word_width
+            
+            self.current_y -= self.line_height
 
     def _estimate_field_width(self, field):
         """Estimate the width a form field will take"""
         field_type = field['type']
         
         if field_type in ['text', 'email', 'number', 'date']:
-            return 150
+            return field.get('width', self.default_field_width)
         elif field_type == 'checkbox':
             return 17
         elif field_type == 'dropdown':
@@ -578,7 +741,7 @@ class MarkdownToPDFForm:
         
         try:
             if field_type in ['text', 'email', 'number', 'date']:
-                width = 150
+                width = field.get('width', self.default_field_width)
                 height = 12
                 canvas.acroForm.textfield(
                     name=field_name,
@@ -598,7 +761,7 @@ class MarkdownToPDFForm:
                 
             elif field_type == 'textarea':
                 lines = field.get('lines', 3)
-                width = 400
+                width = field.get('width', 400)
                 height = lines * self.line_height + 8
                 
                 try:
@@ -652,16 +815,11 @@ class MarkdownToPDFForm:
                 num_options = len(field['options'])
                 
                 if num_options <= 2:
+                    current_line_x = x
+                    current_y = y
+                    max_option_width = 0
+                    
                     for i, option in enumerate(field['options']):
-                        if i > 0:
-                            self.current_y -= self.line_height
-                            self._check_page_break(canvas, 1)
-                            current_line_x = self.margin
-                            current_y = self.current_y
-                        else:
-                            current_line_x = x
-                            current_y = y
-                        
                         option_value = option.strip()
                         
                         try:
@@ -694,14 +852,16 @@ class MarkdownToPDFForm:
                         label_x = current_line_x + 18
                         canvas.setFont("Helvetica", 10)
                         canvas.drawString(label_x, current_y, option_value)
+                        
+                        # Calculate width for this option
+                        option_width = 18 + canvas.stringWidth(option_value) + 20
+                        max_option_width = max(max_option_width, option_width)
+                        
+                        # Move to next position for second option
+                        if i == 0 and num_options > 1:
+                            current_line_x += option_width
                     
-                    if num_options == 2:
-                        self.current_y -= self.line_height // 2
-                        canvas.setFont("Helvetica", 8)
-                        canvas.drawString(self.margin, self.current_y, "(Select only one option)")
-                        canvas.setFont("Helvetica", 10)
-                    
-                    return 200
+                    return max_option_width * num_options
                     
                 else:
                     # Use dropdown for more than 2 options
@@ -846,11 +1006,15 @@ Examples:
   %(prog)s form.md --output myform.pdf # Creates myform.pdf
 
 Field Syntax:
-  {{text:field_name}}                  # Text input
-  {{email:email_field}}                # Email input
-  {{date:date_field}}                  # Date input
-  {{textarea:comments}}                # Multi-line text (3 lines default)
-  {{textarea:comments:4}}              # Multi-line text (4 lines)
+  {{text:field_name}}                  # Text input (default 150px width)
+  {{text:field_name:200}}              # Text input (200px width)
+  {{email:email_field}}                # Email input (default width)
+  {{email:email_field:250}}            # Email input (250px width)
+  {{number:number_field:100}}          # Number input (100px width)
+  {{date:date_field:180}}              # Date input (180px width)
+  {{textarea:comments}}                # Multi-line text (3 lines, default width)
+  {{textarea:comments:5}}              # Multi-line text (5 lines, default width)
+  {{textarea:comments:5:500}}          # Multi-line text (5 lines, 500px width)
   {{checkbox:option}}                  # Checkbox
   {{radio:group:opt1,opt2}}            # Radio buttons
   {{dropdown:field:opt1,opt2,opt3}}    # Dropdown list
@@ -871,7 +1035,7 @@ Field Syntax:
     parser.add_argument(
         '--version',
         action='version',
-        version='%(prog)s 1.0'
+        version='%(prog)s 1.1'
     )
     
     args = parser.parse_args()
@@ -922,11 +1086,11 @@ Please fill out the following information:
 
 **Name:** {{text:full_name}}
 
-**Email:** {{email:email_address}}
+**Email:** {{email:email_address:250}}
 
-**Phone:** {{text:phone_number}}
+**Phone:** {{text:phone_number:120}}
 
-**Date of Birth:** {{date:birth_date}}
+**Date of Birth:** {{date:birth_date:180}}
 
 **Department:** {{dropdown:department:Engineering,Marketing,Sales,HR,Finance}}
 
@@ -934,7 +1098,7 @@ Please fill out the following information:
 
 **Contact Name:** {{text:emergency_name}}
 
-**Contact Phone:** {{text:emergency_phone}}
+**Contact Phone:** {{text:emergency_phone:120}}
 
 **Relationship:** {{dropdown:relationship:Spouse,Parent,Sibling,Friend,Other}}
 
@@ -948,6 +1112,10 @@ Please fill out the following information:
 ## Additional Comments
 
 {{textarea:comments:4}}
+
+**Long Comments Section:**
+
+{{textarea:long_comments:6:500}}
 
 **Signature:** ________________________
 
@@ -963,7 +1131,7 @@ if __name__ == "__main__":
         print("Markdown to PDF Form Converter")
         print("==============================")
         print()
-        print("Usage: python markdown_to_pdf_form.py <input.md> [-o output.pdf]")
+        print("Usage: python md2pdfform.py <input.md> [-o output.pdf]")
         print()
         print("Run with --help for detailed usage information")
         print("Run demo by adding 'demo' as argument")

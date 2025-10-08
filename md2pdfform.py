@@ -19,6 +19,54 @@ class MarkdownToPDFForm:
         self.available_width = self.width - (2 * self.margin)
         self.default_field_width = 150
         
+        # Unicode superscript and subscript mappings
+        self.superscript_map = {
+            '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+            '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+            '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')',
+            'ⁿ': 'n', 'ⁱ': 'i'
+        }
+        self.subscript_map = {
+            '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+            '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+            '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')',
+            'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x'
+        }
+    
+    def _normalize_text(self, text):
+        """Convert superscripts and subscripts to regular text with notation"""
+        result = []
+        i = 0
+        
+        while i < len(text):
+            char = text[i]
+            
+            # Check for superscript
+            if char in self.superscript_map:
+                # Collect all consecutive superscripts
+                superscript_chars = []
+                while i < len(text) and text[i] in self.superscript_map:
+                    superscript_chars.append(self.superscript_map[text[i]])
+                    i += 1
+                result.append('^' + ''.join(superscript_chars))
+                continue
+            
+            # Check for subscript
+            if char in self.subscript_map:
+                # Collect all consecutive subscripts
+                subscript_chars = []
+                while i < len(text) and text[i] in self.subscript_map:
+                    subscript_chars.append(self.subscript_map[text[i]])
+                    i += 1
+                result.append('_' + ''.join(subscript_chars))
+                continue
+            
+            # Regular character
+            result.append(char)
+            i += 1
+        
+        return ''.join(result)
+        
     def parse_markdown_forms(self, md_text):
         """Parse markdown text and identify form field patterns"""
         patterns = [
@@ -115,13 +163,42 @@ class MarkdownToPDFForm:
         c = canvas.Canvas(output_filename, pagesize=letter)
         
         lines = text.split('\n')
+        in_code_block = False
+        code_block_lines = []
         
-        for line_num, line in enumerate(lines):
+        line_num = 0
+        while line_num < len(lines):
+            line = lines[line_num]
+            
+            # Check for code block markers
+            if line.strip().startswith('```') or line.strip().startswith("'''"):
+                if not in_code_block:
+                    # Starting a code block
+                    in_code_block = True
+                    code_block_lines = []
+                    line_num += 1
+                    continue
+                else:
+                    # Ending a code block
+                    in_code_block = False
+                    self._draw_code_block(c, code_block_lines)
+                    code_block_lines = []
+                    line_num += 1
+                    continue
+            
+            # If we're in a code block, collect lines
+            if in_code_block:
+                code_block_lines.append(line)
+                line_num += 1
+                continue
+            
+            # Normal processing for non-code-block lines
             if not line.strip():
                 self.current_y -= self.line_height
                 if self.current_y < self.margin:
                     c.showPage()
                     self.current_y = self.height - self.margin
+                line_num += 1
                 continue
             
             # Find all fields in this line
@@ -144,6 +221,12 @@ class MarkdownToPDFForm:
                 self._process_line_with_fields(c, line, fields_in_line, has_blank_line_before_heading)
             else:
                 self._draw_text_line(c, line)
+            
+            line_num += 1
+        
+        # Handle unclosed code block at end of file
+        if in_code_block and code_block_lines:
+            self._draw_code_block(c, code_block_lines)
         
         if self.current_y >= self.height - self.margin - 20:
             c.drawString(self.margin, self.current_y, "")
@@ -252,17 +335,22 @@ class MarkdownToPDFForm:
             if text_width <= remaining_width:
                 # Fits on same line
                 self._draw_formatted_text_inline(canvas, remaining_text, current_x)
+                self.current_y -= self.line_height
             else:
-                # Doesn't fit, move to next line
+                # Doesn't fit, move to next line and draw with wrapping
                 self.current_y -= self.line_height
                 self._check_page_break(canvas, 1)
-                self._draw_formatted_text(canvas, remaining_text.strip(), self.margin)
+                # Use _draw_formatted_text which properly handles wrapping and moves current_y
+                wrapped = self._draw_formatted_text(canvas, remaining_text.strip(), self.margin)
+                # Don't decrement current_y again if wrapping already happened
+                if not wrapped:
+                    self.current_y -= self.line_height
                 # Add extra space before heading
                 if next_line_is_heading:
                     self.current_y -= self.line_height
                 return
-        
-        self.current_y -= self.line_height
+        else:
+            self.current_y -= self.line_height
         
         # Add extra space before heading
         if next_line_is_heading:
@@ -368,6 +456,71 @@ class MarkdownToPDFForm:
             
             self.current_y -= self.line_height
 
+    def _draw_code_block(self, canvas, code_lines):
+        """Draw a code block with monospace font"""
+        if not code_lines:
+            return
+        
+        # Add some spacing before code block
+        self._check_page_break(canvas, len(code_lines) + 2)
+        self.current_y -= self.line_height // 2
+        
+        # Draw a light background box (optional)
+        code_block_height = (len(code_lines) + 1) * self.line_height
+        canvas.setFillColorRGB(0.95, 0.95, 0.95)  # Light gray background
+        canvas.rect(
+            self.margin - 5, 
+            self.current_y - code_block_height + self.line_height,
+            self.available_width + 10,
+            code_block_height,
+            fill=1,
+            stroke=0
+        )
+        canvas.setFillColorRGB(0, 0, 0)  # Reset to black
+        
+        # Draw each line of code
+        canvas.setFont("Courier", 9)
+        for line in code_lines:
+            self._check_page_break(canvas, 1)
+            
+            # Handle long lines that need wrapping
+            if canvas.stringWidth(line) <= self.available_width:
+                canvas.drawString(self.margin, self.current_y, line)
+                self.current_y -= self.line_height
+            else:
+                # Wrap long code lines
+                wrapped_lines = self._wrap_code_line(canvas, line)
+                for wrapped_line in wrapped_lines:
+                    self._check_page_break(canvas, 1)
+                    canvas.setFont("Courier", 9)
+                    canvas.drawString(self.margin, self.current_y, wrapped_line)
+                    self.current_y -= self.line_height
+        
+        # Add some spacing after code block
+        self.current_y -= self.line_height // 2
+        canvas.setFont("Helvetica", 10)  # Reset to default font
+    
+    def _wrap_code_line(self, canvas, line):
+        """Wrap a long code line to fit within available width"""
+        canvas.setFont("Courier", 9)
+        wrapped = []
+        
+        if not line:
+            return ['']
+        
+        # Calculate how many characters fit
+        char_width = canvas.stringWidth('M')  # Use 'M' as average character width
+        chars_per_line = int(self.available_width / char_width)
+        
+        # Split line into chunks
+        pos = 0
+        while pos < len(line):
+            chunk = line[pos:pos + chars_per_line]
+            wrapped.append(chunk)
+            pos += chars_per_line
+        
+        return wrapped if wrapped else ['']
+    
     def _estimate_field_width(self, field):
         """Estimate the width a form field will take"""
         field_type = field['type']
@@ -415,6 +568,71 @@ class MarkdownToPDFForm:
             self._check_page_break(canvas, 1)
             self._draw_formatted_text(canvas, after_field.strip(), self.margin)
             self.current_y -= self.line_height
+
+    def _draw_code_block(self, canvas, code_lines):
+        """Draw a code block with monospace font"""
+        if not code_lines:
+            return
+        
+        # Add some spacing before code block
+        self._check_page_break(canvas, len(code_lines) + 2)
+        self.current_y -= self.line_height // 2
+        
+        # Draw a light background box (optional)
+        code_block_height = (len(code_lines) + 1) * self.line_height
+        canvas.setFillColorRGB(0.95, 0.95, 0.95)  # Light gray background
+        canvas.rect(
+            self.margin - 5, 
+            self.current_y - code_block_height + self.line_height,
+            self.available_width + 10,
+            code_block_height,
+            fill=1,
+            stroke=0
+        )
+        canvas.setFillColorRGB(0, 0, 0)  # Reset to black
+        
+        # Draw each line of code
+        canvas.setFont("Courier", 9)
+        for line in code_lines:
+            self._check_page_break(canvas, 1)
+            
+            # Handle long lines that need wrapping
+            if canvas.stringWidth(line) <= self.available_width:
+                canvas.drawString(self.margin, self.current_y, line)
+                self.current_y -= self.line_height
+            else:
+                # Wrap long code lines
+                wrapped_lines = self._wrap_code_line(canvas, line)
+                for wrapped_line in wrapped_lines:
+                    self._check_page_break(canvas, 1)
+                    canvas.setFont("Courier", 9)
+                    canvas.drawString(self.margin, self.current_y, wrapped_line)
+                    self.current_y -= self.line_height
+        
+        # Add some spacing after code block
+        self.current_y -= self.line_height // 2
+        canvas.setFont("Helvetica", 10)  # Reset to default font
+    
+    def _wrap_code_line(self, canvas, line):
+        """Wrap a long code line to fit within available width"""
+        canvas.setFont("Courier", 9)
+        wrapped = []
+        
+        if not line:
+            return ['']
+        
+        # Calculate how many characters fit
+        char_width = canvas.stringWidth('M')  # Use 'M' as average character width
+        chars_per_line = int(self.available_width / char_width)
+        
+        # Split line into chunks
+        pos = 0
+        while pos < len(line):
+            chunk = line[pos:pos + chars_per_line]
+            wrapped.append(chunk)
+            pos += chars_per_line
+        
+        return wrapped if wrapped else ['']
 
     def _draw_text_line(self, canvas, line):
         """Draw a regular text line with formatting"""
@@ -476,6 +694,9 @@ class MarkdownToPDFForm:
         """Draw text with inline bold formatting and wrapping"""
         if not text.strip():
             return False
+        
+        # Normalize Unicode characters that Helvetica doesn't support
+        text = self._normalize_text(text)
         
         bold_pattern = r'\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*'
         has_bold = bool(re.search(bold_pattern, text))
@@ -656,6 +877,9 @@ class MarkdownToPDFForm:
         if not text.strip():
             return 0
         
+        # Normalize Unicode characters
+        text = self._normalize_text(text)
+        
         canvas.setFont(font_name, font_size)
         available_width = self.width - self.margin - x
         
@@ -678,6 +902,9 @@ class MarkdownToPDFForm:
 
     def _draw_formatted_text_inline(self, canvas, text, x_start):
         """Draw formatted text inline and return ending x position"""
+        # Normalize Unicode characters
+        text = self._normalize_text(text)
+        
         bold_pattern = r'\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*'
         current_x = x_start
         last_end = 0
@@ -706,6 +933,9 @@ class MarkdownToPDFForm:
 
     def _calculate_formatted_text_width(self, canvas, text):
         """Calculate the total width of text with bold formatting"""
+        # Normalize Unicode characters
+        text = self._normalize_text(text)
+        
         bold_pattern = r'\*\*([^*]+(?:\*(?!\*)[^*]*)*)\*\*'
         total_width = 0
         last_end = 0

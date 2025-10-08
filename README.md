@@ -87,27 +87,33 @@ Use these patterns in your Markdown to create form fields:
 **Phone:** {{text:phone_number}}
 **Short Code:** {{text:code:80}}
 **Long Address:** {{text:address:250}}
+**Name with default:** {{text:full_name::John Doe}}
+**Email with width and default:** {{text:email:200:user@example.com}}
 ```
 
-You can optionally specify the field width in pixels as the last parameter. Default width is 150px.
+You can optionally specify the field width in pixels and a default value. Syntax: `{{text:field_name:width:default_value}}`
 
 ### Number Fields
 ```markdown
 **Age:** {{number:age}}
 **Age (narrow):** {{number:age:60}}
 **Population:** {{number:population:200}}
+**Age with default:** {{number:age::25}}
+**Score with width and default:** {{number:score:80:100}}
 ```
 
 ### Email Fields
 ```markdown
 **Email:** {{email:email_address}}
 **Email (wide):** {{email:email_address:250}}
+**Email with default:** {{email:contact::user@example.com}}
 ```
 
 ### Date Fields
 ```markdown
 **Date of Birth:** {{date:birth_date}}
 **Event Date:** {{date:event_date:180}}
+**Date with default:** {{date:start_date::2024-01-01}}
 ```
 
 ### Text Area Fields
@@ -115,21 +121,31 @@ You can optionally specify the field width in pixels as the last parameter. Defa
 **Comments:** {{textarea:comments}} # Default 3 lines, 400px width
 **Detailed Feedback:** {{textarea:feedback:5}} # Custom 5 lines, default width
 **Notes:** {{textarea:notes:10:500}} # Custom 10 lines, 500px width
+**Bio with default:** {{textarea:bio:5::Enter your biography here}}
+**Description:** {{textarea:desc:3:400:Sample description}}
 ```
 
-Text areas support two optional parameters: line count and width. The line count comes first, then the width.
+Text areas support optional parameters: line count, width, and default value. Syntax: `{{textarea:name:lines:width:default}}`
 
 ### Checkbox Fields
 ```markdown
 **Subscribe to newsletter:** {{checkbox:newsletter}}
 **I agree to terms:** {{checkbox:terms_agreement}}
+**Checked by default:** {{checkbox:consent:true}}
+**Unchecked by default:** {{checkbox:optional:false}}
 ```
+
+Checkboxes can have default checked state. Use `true`, `yes`, `1`, or `checked` to check by default.
 
 ### Radio Button Groups
 ```markdown
 **Gender:** {{radio:gender:Male,Female}}
 **Size:** {{radio:size:Small,Medium,Large}}
+**Gender with default:** {{radio:gender:Male,Female:Male}}
+**Status with default:** {{radio:status:Active,Inactive:Active}}
 ```
+
+Radio buttons can have a default selected option. Syntax: `{{radio:name:option1,option2:default_option}}`
 
 **Note:** Radio groups with 2 or fewer options show as circular radio buttons on the same line. Groups with 3+ options automatically convert to dropdown menus.
 
@@ -142,8 +158,8 @@ Text areas support two optional parameters: line count and width. The line count
 ### Multiple Fields Per Line
 ```markdown
 Total time: {{number:hours:60}} hours {{number:minutes:60}} minutes
-Name: {{text:first:120}} {{text:last:120}}
-Date: {{date:day:100}} Time: {{text:time:80}}
+Name: {{text:first:120:John}} {{text:last:120:Smith}}
+Date: {{date:day:100:2024-01-01}} Time: {{text:time:80:14:00}}
 ```
 
 ### Underscore Text Fields
@@ -152,22 +168,36 @@ Name: ________________________
 ```
 (Four or more underscores automatically convert to text fields with default width)
 
+### Code Blocks
+```markdown
+Use triple backticks or triple quotes to create code blocks:
+
+\```
+def example_function():
+    return "Code is rendered in monospace"
+\```
+```
+
+Code blocks are rendered with monospace font (Courier) and a light gray background.
+
 ## Comprehensive Demo File
 
-A complete demonstration file (`comprehensive-demo.md`) is available that showcases all features of md2pdfform. This demo includes:
+A complete demonstration file (`demo.md`) is available that showcases all features of md2pdfform. This demo includes:
 
 ### All Field Types:
-- **Text fields** for various inputs (names, addresses, etc.) with customizable widths
-- **Number fields** for numeric values with optional width specification
-- **Email fields** with validation and custom widths
-- **Date fields** for standardized date input with width control
-- **Checkbox fields** for yes/no selections
-- **Radio button groups** (2 options displayed inline)
+- **Text fields** for various inputs with customizable widths and default values
+- **Number fields** for numeric values with optional width and defaults
+- **Email fields** with validation, custom widths, and default values
+- **Date fields** for standardized date input with width control and defaults
+- **Checkbox fields** for yes/no selections with default checked states
+- **Radio button groups** (2 options displayed inline) with pre-selected defaults
 - **Dropdown menus** (3+ options)
-- **Text areas** with custom line counts (3, 5, 7, 10 lines) and optional widths
+- **Text areas** with custom line counts, optional widths, and default text
 - **Underscore-to-field** auto-conversion
+- **Code blocks** with syntax preservation
 
 ### Advanced Features:
+- **Default values** - Pre-filled form fields with example data
 - **Multiple fields per line** - Demonstrates compact form layouts
 - **Bold text formatting** - Both inline and full-line bold text
 - **Headers** - All heading levels (H1-H4)
@@ -175,17 +205,18 @@ A complete demonstration file (`comprehensive-demo.md`) is available that showca
 - **Horizontal rules** - Using `---`, `***`, or `___`
 - **Text wrapping** - Long paragraphs with automatic wrapping
 - **Mixed content** - Complex forms combining multiple element types
+- **Code blocks** - Monospace code with syntax preservation
 
 ### Demo Structure:
-The demo is organized into 20 sections covering:
-1. Text Input Fields (including custom widths)
-2. Number and Email Fields (with width examples)
-3. Date Fields (with width customization)
-4. Checkbox Fields
-5. Radio Button Groups (inline display for 2 options)
+The demo is organized into 21 sections covering:
+1. Text Input Fields (including custom widths and defaults)
+2. Number and Email Fields (with width and default examples)
+3. Date Fields (with width customization and defaults)
+4. Checkbox Fields (with default checked states)
+5. Radio Button Groups (inline display with pre-selected options)
 6. Dropdown Menus
-7. Text Area Fields (with custom lines and widths)
-8. Multiple Fields Per Line (with custom widths)
+7. Text Area Fields (with custom lines, widths, and default text)
+8. Multiple Fields Per Line (with custom widths and defaults)
 9. Underscore Text Fields
 10. Markdown Formatting Features
 11. Bullet Lists with Formatting
@@ -197,11 +228,12 @@ The demo is organized into 20 sections covering:
 17. Date and Time Information
 18. Terms and Certification
 19. Signature Block
-20. Final Notes
+20. Code Block Demonstration
+21. Final Notes
 
 ### Running the Demo:
 ```bash
-python md2pdfform.py comprehensive-demo.md -o demo_output.pdf
+python md2pdfform.py demo.md -o demo_form.pdf
 ```
 
 This generates a complete PDF form demonstrating all capabilities of the tool, making it perfect for testing, learning the syntax, and as a reference for creating your own forms.
@@ -380,6 +412,58 @@ pip install --upgrade reportlab
 - BeautifulSoup4: 4.9+
 - Tested on: Windows, macOS, Linux
 
+## Exporting Filled Forms to Excel
+
+After users fill out your PDF forms, you can extract the data and export it to Excel using the included `pdfform2excel.py` script.
+
+### Installation
+
+```bash
+# Install required packages for Excel export
+pip install PyPDF2 openpyxl
+```
+
+### Usage
+
+**Export a single filled PDF:**
+```bash
+python pdfform2excel.py demo_form.pdf -o demo_data.xlsx
+```
+
+**Export multiple filled PDFs (combines into one Excel file):**
+```bash
+python pdfform2excel.py form1.pdf form2.pdf form3.pdf -o combined_data.xlsx
+```
+
+**Export all PDFs in a directory:**
+```bash
+python pdfform2excel.py *.pdf -o all_forms.xlsx
+```
+
+### Export Modes
+
+- **Single PDF Mode**: Creates a two-column spreadsheet (Field Name | Value)
+- **Multiple PDF Mode**: Each PDF becomes a row, with all unique fields as columns - perfect for analyzing survey results or comparing multiple submissions
+
+### Example Workflow
+
+```bash
+# 1. Create a PDF form from markdown
+python md2pdfform.py demo.md -o demo_form.pdf
+
+# 2. Distribute demo_form.pdf to users for completion
+
+# 3. After receiving filled forms, export to Excel
+python pdfform2excel.py filled_form1.pdf filled_form2.pdf filled_form3.pdf -o results.xlsx
+```
+
+The Excel export includes:
+- Formatted headers with blue background
+- Auto-adjusted column widths
+- All field types (text, numbers, dates, checkboxes, radio buttons, dropdowns)
+- Checkbox values shown as "Yes"/"No"
+- Empty fields preserved for data consistency
+
 ## Batch Processing
 
 ```python
@@ -410,7 +494,7 @@ for filename in os.listdir(input_dir):
 - **Images**: Markdown images are not currently supported
 - **Tables**: Markdown tables are not currently supported
 - **Links**: Hyperlinks are not preserved in the PDF
-- **Code Blocks**: Code blocks are rendered as plain text
+- **Unicode Characters**: Superscripts and subscripts are converted to caret/underscore notation (e.g., x² becomes x^2)
 
 ## Contributing
 
@@ -441,6 +525,15 @@ For issues and questions:
   - Error message or unexpected behavior description
 
 ## Changelog
+
+### Version 1.3.0
+- ✨ **Default field values** - Pre-fill forms with example data or placeholders
+- ✨ **Code block support** - Render code with monospace font and gray background
+- ✨ **Unicode normalization** - Convert superscripts/subscripts to readable notation
+- 🐛 **Fixed dropdown field names** - Proper field naming without options included
+- 🐛 **Fixed text wrapping after fields** - Correct spacing for wrapped text
+- 🐛 **Fixed empty default values** - Support for fields with `::` syntax
+- 📊 **PDF to Excel export** - New `pdfform2excel.py` script for data extraction
 
 ### Version 1.2.0
 - ✨ **Field width customization** - Specify custom widths for text, email, number, and date fields

@@ -70,15 +70,15 @@ class MarkdownToPDFForm:
     def parse_markdown_forms(self, md_text):
         """Parse markdown text and identify form field patterns"""
         patterns = [
-            (r'\{\{text:([^}:]+)(?::(\d*))?(?::([^}]*))?\}\}', 'text'),
-            (r'\{\{email:([^}:]+)(?::(\d*))?(?::([^}]*))?\}\}', 'email'),
-            (r'\{\{number:([^}:]+)(?::(\d*))?(?::([^}]*))?\}\}', 'number'),
-            (r'\{\{date:([^}:]+)(?::(\d*))?(?::([^}]*))?\}\}', 'date'),
-            (r'\{\{textarea:([^}:]+):(\d+)(?::(\d*))?(?::([^}]*))?\}\}', 'textarea_lines_width_default'),
-            (r'\{\{textarea:([^}:]+)(?::(\d*))?(?::([^}]*))?\}\}', 'textarea'),
-            (r'\{\{checkbox:([^}:]+)(?::([^}]*))?\}\}', 'checkbox'),
-            (r'\{\{radio:([^}:]+):([^}:]+)(?::([^}]*))?\}\}', 'radio'),
-            (r'\{\{dropdown:([^}:]+):([^}]+)\}\}', 'dropdown'),
+            (r'\{\{text:([^}:]+)(?::(\d+))?\}\}', 'text'),
+            (r'\{\{email:([^}:]+)(?::(\d+))?\}\}', 'email'),
+            (r'\{\{number:([^}:]+)(?::(\d+))?\}\}', 'number'),
+            (r'\{\{date:([^}:]+)(?::(\d+))?\}\}', 'date'),
+            (r'\{\{textarea:([^}:]+):(\d+)(?::(\d+))?\}\}', 'textarea_lines_width'),
+            (r'\{\{textarea:([^}:]+)(?::(\d+))?\}\}', 'textarea'),
+            (r'\{\{checkbox:([^}]+)\}\}', 'checkbox'),
+            (r'\{\{radio:([^}]+):([^}]+)\}\}', 'radio'),
+            (r'\{\{dropdown:([^}]+):([^}]+)\}\}', 'dropdown'),
             (r'_{4,}', 'underlines'),
         ]
         
@@ -97,54 +97,34 @@ class MarkdownToPDFForm:
                 
                 if field_type in ['text', 'email', 'number', 'date']:
                     field_info['name'] = match.group(1)
-                    # Check if width is specified (group 2) - can be empty string
-                    if match.group(2) and match.group(2).strip():
+                    # Check if width is specified (group 2)
+                    if match.group(2):
                         field_info['width'] = int(match.group(2))
                     else:
                         field_info['width'] = self.default_field_width
-                    # Check if default value is specified (group 3) - can be empty string
-                    if match.group(3) is not None:
-                        field_info['default'] = match.group(3)
                         
-                elif field_type == 'textarea_lines_width_default':
+                elif field_type == 'textarea_lines_width':
                     field_info['name'] = match.group(1)
                     field_info['lines'] = int(match.group(2))
                     field_info['type'] = 'textarea'
-                    # Check if width is specified (group 3) - can be empty string
-                    if match.group(3) and match.group(3).strip():
+                    # Check if width is specified (group 3)
+                    if match.group(3):
                         field_info['width'] = int(match.group(3))
-                    # Check if default value is specified (group 4) - can be empty string
-                    if match.group(4) is not None:
-                        field_info['default'] = match.group(4)
                         
                 elif field_type == 'textarea':
                     field_info['name'] = match.group(1)
-                    # Check if the second group is lines, width, or default
-                    if match.group(2) and match.group(2).strip():
-                        # Try to parse as number (lines or width)
-                        try:
-                            num_val = int(match.group(2))
-                            # For backward compatibility, treat single number as lines
-                            field_info['lines'] = num_val
-                        except ValueError:
-                            # It's a default value
-                            field_info['default'] = match.group(2)
-                    # Check if third group is default value - can be empty string
-                    if match.group(3) is not None:
-                        field_info['default'] = match.group(3)
+                    # Check if the second group is lines or width
+                    if match.group(2):
+                        # Could be either lines or width - need to determine
+                        # For backward compatibility, treat single number as lines
+                        field_info['lines'] = int(match.group(2))
                     
                 elif field_type == 'checkbox':
                     field_info['name'] = match.group(1)
-                    # Check if default value is specified (group 2) - can be empty string
-                    if match.group(2) is not None:
-                        field_info['default'] = match.group(2)
                     
                 elif field_type in ['radio', 'dropdown']:
                     field_info['name'] = match.group(1)
                     field_info['options'] = [opt.strip() for opt in match.group(2).split(',')]
-                    # Check if default value is specified (group 3 for radio) - can be empty string
-                    if field_type == 'radio' and match.group(3) is not None:
-                        field_info['default'] = match.group(3)
                     
                 elif field_type == 'underlines':
                     field_info['name'] = f"field_{len(all_fields) + 1}"
@@ -993,8 +973,6 @@ class MarkdownToPDFForm:
             if field_type in ['text', 'email', 'number', 'date']:
                 width = field.get('width', self.default_field_width)
                 height = 12
-                default_value = field.get('default', '')
-                
                 canvas.acroForm.textfield(
                     name=field_name,
                     tooltip=f"Enter {field_type}",
@@ -1007,8 +985,7 @@ class MarkdownToPDFForm:
                     borderColor=black,
                     forceBorder=True,
                     fontName="Helvetica",
-                    fontSize=10,
-                    value=default_value
+                    fontSize=10
                 )
                 return width
                 
@@ -1016,7 +993,6 @@ class MarkdownToPDFForm:
                 lines = field.get('lines', 3)
                 width = field.get('width', 400)
                 height = lines * self.line_height + 8
-                default_value = field.get('default', '')
                 
                 try:
                     canvas.acroForm.textfield(
@@ -1032,8 +1008,7 @@ class MarkdownToPDFForm:
                         forceBorder=True,
                         multiline=True,
                         fontName="Helvetica",
-                        fontSize=10,
-                        value=default_value
+                        fontSize=10
                     )
                 except TypeError:
                     canvas.acroForm.textfield(
@@ -1048,17 +1023,12 @@ class MarkdownToPDFForm:
                         borderColor=black,
                         forceBorder=True,
                         fontName="Helvetica",
-                        fontSize=10,
-                        value=default_value
+                        fontSize=10
                     )
                 return height
                 
             elif field_type == 'checkbox':
                 size = 12
-                default_value = field.get('default', '')
-                # Check if checkbox should be checked by default
-                is_checked = default_value.lower() in ['true', 'yes', '1', 'checked']
-                
                 canvas.acroForm.checkbox(
                     name=field_name,
                     tooltip="Check this box",
@@ -1067,14 +1037,12 @@ class MarkdownToPDFForm:
                     borderColor=black,
                     fillColor=None,
                     textColor=black,
-                    forceBorder=True,
-                    checked=is_checked
+                    forceBorder=True
                 )
                 return size + 5
                 
             elif field_type == 'radio':
                 num_options = len(field['options'])
-                default_value = field.get('default', '')
                 
                 if num_options <= 2:
                     current_line_x = x
@@ -1083,9 +1051,6 @@ class MarkdownToPDFForm:
                     
                     for i, option in enumerate(field['options']):
                         option_value = option.strip()
-                        
-                        # Check if this option should be selected by default
-                        is_selected = (default_value and option_value.lower() == default_value.lower())
                         
                         try:
                             canvas.acroForm.radio(
@@ -1098,8 +1063,7 @@ class MarkdownToPDFForm:
                                 borderColor=black,
                                 fillColor=None,
                                 textColor=black,
-                                forceBorder=True,
-                                selected=is_selected
+                                forceBorder=True
                             )
                         except Exception:
                             canvas.acroForm.checkbox(
@@ -1112,8 +1076,7 @@ class MarkdownToPDFForm:
                                 fillColor=None,
                                 textColor=black,
                                 forceBorder=True,
-                                shape='circle',
-                                checked=is_selected
+                                shape='circle'
                             )
                         
                         label_x = current_line_x + 18

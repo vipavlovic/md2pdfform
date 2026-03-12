@@ -430,9 +430,14 @@ pip install PyPDF2 openpyxl
 python pdfform2excel.py demo_form.pdf -o demo_data.xlsx
 ```
 
+**Export with source MD to get correct field order and no phantom fields:**
+```bash
+python pdfform2excel.py demo_form.pdf -o demo_data.xlsx --md demo.md
+```
+
 **Export multiple filled PDFs (combines into one Excel file):**
 ```bash
-python pdfform2excel.py form1.pdf form2.pdf form3.pdf -o combined_data.xlsx
+python pdfform2excel.py form1.pdf form2.pdf form3.pdf -o combined_data.xlsx --md form.md
 ```
 
 **Export all PDFs in a directory:**
@@ -440,10 +445,19 @@ python pdfform2excel.py form1.pdf form2.pdf form3.pdf -o combined_data.xlsx
 python pdfform2excel.py *.pdf -o all_forms.xlsx
 ```
 
+### `--md` Option (Recommended)
+
+Pass the source `.md` file that was used to generate the PDF form:
+
+- **Eliminates phantom fields** — PyPDF2 can produce spurious field names from radio button groups (`fieldname-1`, `fieldname-2`) or fallback checkboxes (`fieldname_0`, `fieldname_1`). Providing `--md` filters these out entirely.
+- **Preserves MD field order** — fields appear in the same order as in the source document.
+
+Without `--md`, automatic deduplication is still applied as a best-effort fix.
+
 ### Export Modes
 
 - **Single PDF Mode**: Creates a two-column spreadsheet (Field Name | Value)
-- **Multiple PDF Mode**: Each PDF becomes a row, with all unique fields as columns - perfect for analyzing survey results or comparing multiple submissions
+- **Multiple PDF Mode**: Each PDF becomes a row, with all unique fields as columns — perfect for analyzing survey results or comparing multiple submissions
 
 ### Example Workflow
 
@@ -454,7 +468,7 @@ python md2pdfform.py demo.md -o demo_form.pdf
 # 2. Distribute demo_form.pdf to users for completion
 
 # 3. After receiving filled forms, export to Excel
-python pdfform2excel.py filled_form1.pdf filled_form2.pdf filled_form3.pdf -o results.xlsx
+python pdfform2excel.py filled_form1.pdf filled_form2.pdf filled_form3.pdf -o results.xlsx --md demo.md
 ```
 
 The Excel export includes:
@@ -463,6 +477,22 @@ The Excel export includes:
 - All field types (text, numbers, dates, checkboxes, radio buttons, dropdowns)
 - Checkbox values shown as "Yes"/"No"
 - Empty fields preserved for data consistency
+
+## Reordering an Existing Excel Export
+
+If you have an Excel file that was exported without `--md` and the field order is wrong, use `reorder_excel.py` to fix it in place:
+
+```bash
+# Reorder fields to match the source MD (overwrites the file)
+python reorder_excel.py form.md data.xlsx
+
+# Write to a new file instead
+python reorder_excel.py form.md data.xlsx -o reordered.xlsx
+```
+
+This works for both export layouts:
+- **Single-PDF layout** (`Field Name` / `Value` columns): reorders rows
+- **Multi-PDF layout** (one PDF per row): reorders columns
 
 ## Batch Processing
 
@@ -525,6 +555,12 @@ For issues and questions:
   - Error message or unexpected behavior description
 
 ## Changelog
+
+### Version 1.4.0
+- 🐛 **Fixed phantom fields in Excel export** — `pdfform2excel.py` now removes spurious fields caused by PyPDF2 renaming radio-button duplicates (`name-1`, `name-2`) and md2pdfform fallback checkboxes (`name_0`, `name_1`)
+- ✨ **`--md` option for `pdfform2excel.py`** — pass the source `.md` file to filter fields to only those defined in the form and output them in MD order
+- ✨ **New `reorder_excel.py` script** — reorders rows or columns in an existing Excel export to match the field order in the source `.md` file
+- 🐛 **Fixed alphabetical field ordering** — fields now follow PDF document order instead of being sorted alphabetically
 
 ### Version 1.3.0
 - ✨ **Default field values** - Pre-fill forms with example data or placeholders
